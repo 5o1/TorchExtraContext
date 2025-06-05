@@ -140,3 +140,12 @@ def register_extra_object(module: nn.Module, obj: object, prefix: str = None):
         warnings.warn(f"Training does not launch with an ExtraContext. This object will be ignored.", UserWarning,stacklevel=2)
         return
     module.extra_context.add_object(prefix, obj)
+
+def log_extra(module: nn.Module, *args, **kwargs):
+    """
+    Log extra information to the module's logger.
+    """
+    if not hasattr(module, "extra_context"):
+        warnings.warn(f"Training does not launch with an ExtraContext. Logging will be ignored.", UserWarning, stacklevel=2)
+        return
+    return module.extra_context.log(*args, **kwargs)
