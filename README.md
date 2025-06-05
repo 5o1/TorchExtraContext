@@ -35,7 +35,7 @@ class TopModel(nn.Module):
     
 # In training step:
 
-m = TopModel()
+model = TopModel()
 with ExtraContext(model) as ctx:
     pred = model(batch)
 
