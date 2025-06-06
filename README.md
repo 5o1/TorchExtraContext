@@ -6,7 +6,7 @@ This method is useful when you need to pass losses from `nn.Module` in a deep le
 # Usage
 
 ```python
-from torchextractx import ExtraContext, register_extra_loss, register_extra_hook, register_extra_object
+from torchextractx import ExtraContext, register_extra_loss, register_extra_hook, get_extra_context
 
 # In sub module:
 class SubModel(nn.Module):
@@ -19,7 +19,8 @@ class SubModel(nn.Module):
         def dosomething_hook():
             return x.mean()
         register_extra_hook(self, dosomething_hook, "This is a submodel hook")
-        register_extra_object(self, x, "This is a submodel object")
+        if ctx := get_extra_context(self):
+            ctx['local_var'] = 'This is a local variable'
         return x
 
 # In top module:
@@ -41,11 +42,11 @@ with ExtraContext(model) as ctx:
 
     # ... training step
 
-    losses, hooks_res, objects = ctx.release() # run all the hooks and collect results, popping all the losses and objects
-    # losses, hooks_res, objects are lists of tuples:
+    losses = ctx.losses
+    hooks = ctx.hooks
+    # losses, hooks, objects are lists of tuples:
     # (prefix, loss) for every loss
-    # (prefix, hook_res) for every hook result
-    # (prefix, objects) for every object registered in the context
+    # (prefix, hook) for every hook
 
     loss = lossfn(pred, target)
     for prefix, localoss in losses:
