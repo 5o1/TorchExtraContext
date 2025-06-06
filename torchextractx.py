@@ -26,8 +26,9 @@ class ExtraContext:
 
         self.__registed_module = OrderedDict()
         self.__extra_losses = []
-        self.__extra_objects = []
         self.__extra_hooks = []
+
+        self.__extra_objects = {}
 
     def __enter__(self):
         for prefix, module in self.__context.named_modules():
@@ -51,24 +52,32 @@ class ExtraContext:
                     f"Module {module.__class__.__name__} has no context to remove."
                 )
             delattr(module, "extra_context")
+    
+    def __getitem__(self, key):
+        if self.__extra_objects is None:
+            raise ValueError("Objects dict has been cleared. Users should not access context manager after exiting context. This could be a bug.")
+        return self.__extra_objects[key]
+
+    def __setitem__(self, key, value):
+        if self.__extra_objects is None:
+            raise ValueError("Objects dict has been cleared. Users should not access context manager after exiting context. This could be a bug.")
+        self.__extra_objects[key] = value
 
     def add_loss(self, prefix:str, loss: torch.Tensor):
         """
         Add a loss term to the context.
         """
+        if self.__extra_losses is None:
+            raise ValueError("Losses have been cleared. Users should not access context manager after exiting context. This could be a bug.")
         self.__extra_losses.append((prefix, loss))
 
     def add_hook(self, prefix:str, hook: Callable):
         """
         Add a hook to the context.
         """
+        if self.__extra_hooks is None:
+            raise ValueError("Hooks have been cleared. Users should not access context manager after exiting context. This could be a bug.")
         self.__extra_hooks.append((prefix, hook))
-
-    def add_object(self, prefix:str, obj: object):
-        """
-        Add an object to the context.
-        """
-        self.__extra_objects.append((prefix, obj))
 
     def log(self, *args, **kwargs):
         if self.logger is None:
@@ -77,41 +86,17 @@ class ExtraContext:
         res = self.logger(*args, **kwargs)
         return res
     
+    @property
     def losses(self):
         if self.__extra_losses is None:
             raise ValueError("Losses have been cleared. Users should not access context manager after exiting context. This could be a bug.")
-        while self.__extra_losses:
-            prefix, loss = self.__extra_losses.pop()
-            yield prefix, loss
+        return self.__extra_losses
 
+    @property
     def hooks(self):
         if self.__extra_hooks is None:
             raise ValueError("Hooks have been cleared. Users should not access context manager after exiting context. This could be a bug.")
-        while self.__extra_hooks:
-            prefix, hook = self.__extra_hooks.pop()
-            yield prefix, hook
-
-    def objects(self):
-        if self.__extra_objects is None:
-            raise ValueError("Objects have been cleared. Users should not access context manager after exiting context. This could be a bug.")
-        while self.__extra_objects:
-            prefix, obj = self.__extra_objects.pop()
-            yield prefix, obj
-
-    def release(self):
-        hook_res = []
-        for prefix, hook in self.hooks():
-            res = hook()
-            hook_res.append((prefix, res))
-        
-        losses = []
-        for prefix, loss in self.losses():
-            losses.append((prefix, loss))
-
-        objects = []
-        for prefix, obj in self.objects():
-            objects.append((prefix, obj))
-        return losses, hook_res, objects
+        return self.__extra_hooks
         
 
 def register_extra_loss(module: nn.Module, loss_term: torch.Tensor, prefix: str = None):
@@ -132,14 +117,14 @@ def register_extra_hook(module: nn.Module, hook: Callable, prefix: str = None):
         return
     module.extra_context.add_hook(prefix, hook)
 
-def register_extra_object(module: nn.Module, obj: object, prefix: str = None):
+def get_extra_context(module: nn.Module):
     """
-    Register an extra object to a module.
+    Get the extra context of a module.
     """
     if not hasattr(module, "extra_context"):
-        warnings.warn(f"Training does not launch with an ExtraContext. This object will be ignored.", UserWarning,stacklevel=2)
-        return
-    module.extra_context.add_object(prefix, obj)
+        warnings.warn(f"Training does not launch with an ExtraContext. This will return None.", UserWarning, stacklevel=2)
+        return None
+    return module.extra_context
 
 def log_extra(module: nn.Module, *args, **kwargs):
     """
