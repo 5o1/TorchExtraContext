@@ -6,16 +6,16 @@
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0%2B-red)](https://pytorch.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A PyTorch utility library for collecting losses, metrics, and outputs from nested modules.
+一个 PyTorch 工具库，用于从嵌套的模块中收集损失、指标和输出。
 
-## Why Use This?
+## 为什么用这个库？
 
-When doing deep learning, you often need to add losses in the middle of the network, like distillation loss or auxiliary classifier loss. Common approaches:
+做深度学习时经常需要在网络中间添加损失，比如蒸馏损失或辅助分类器的损失。常见的做法是：
 
-1. Pass losses up layer by layer, which requires modifying `forward()` signatures
-2. Use global variables or callbacks, making code complicated
+1. 把损失层层向上传递，这需要改每个模块的 `forward()` 签名
+2. 用全局变量或回调函数，代码变得很复杂
 
-This library lets you register losses directly in modules without changing interfaces:
+这个库让你直接在模块里注册损失，不改任何接口：
 
 ```python
 def forward(self, x):
@@ -24,36 +24,36 @@ def forward(self, x):
     return x
 ```
 
-Then collect all losses in one line:
+然后一行代码收集所有损失：
 
 ```python
 with ExtraContext(model) as ctx:
     output = model(x)
-    all_losses = ctx.get_losses()  # Done
+    all_losses = ctx.get_losses()  # 完成
 ```
 
-## 🚀 Installation
+## 🚀 安装
 
-### From source
+### 从源代码安装
 ```bash
 pip install -e .
 ```
 
-### With dev tools
+### 使用开发工具安装
 ```bash
-pip install -e ".[dev]"  # pytest, black, mypy
+pip install -e ".[dev]"  # 包含 pytest, black, mypy
 ```
 
-## 📖 Quick Start
+## 📖 快速开始
 
-### Basic Usage
+### 基础用法
 
 ```python
 import torch
 import torch.nn as nn
 from torchextractx import ExtraContext, register_extra_loss, register_extra_metric
 
-# Define a model with intermediate losses
+# 定义具有中间损失的模型
 class FeatureExtractor(nn.Module):
     def __init__(self):
         super().__init__()
@@ -64,7 +64,7 @@ class FeatureExtractor(nn.Module):
         x = self.fc1(x)
         x = torch.relu(x)
         
-        # Register an auxiliary loss (no interface modification needed)
+        # 注册辅助损失（无需修改接口）
         aux_loss = x.mean()
         register_extra_loss(self, "auxiliary_loss", aux_loss)
         
@@ -82,89 +82,91 @@ class Classifier(nn.Module):
         x = self.classifier(x)
         return x
 
-# Training loop
+# 训练循环
 model = Classifier()
 optimizer = torch.optim.Adam(model.parameters())
 
-# Use ExtraContext
+# 使用 ExtraContext：一行代码启用所有功能
 with ExtraContext(model) as ctx:
     x = torch.randn(32, 10)
     logits = model(x)
     
-    # Main loss
+    # 主损失
     main_loss = torch.nn.functional.cross_entropy(logits, targets)
     
-    # Collect losses from all nested modules
+    # 收集所有深层模块注册的损失
     aux_losses = ctx.get_losses()  # {'auxiliary_loss': tensor(...), ...}
     
-    # Total loss = main loss + weighted auxiliary losses
+    # 总损失 = 主损失 + 权重化的辅助损失
     total_loss = main_loss
     for name, loss_val in aux_losses.items():
-        print(f"aux {name}: {loss_val:.4f}")
-        total_loss = total_loss + 0.1 * loss_val  # weight is tunable
+        print(f"辅助 {name}: {loss_val:.4f}")
+        total_loss = total_loss + 0.1 * loss_val  # 权重可调
     
-    # Backward
+    # 反向传播
     optimizer.zero_grad()
     total_loss.backward()
     optimizer.step()
 ```
 
-## 🔧 API Reference
+## 🔧 API 参考
 
 ### `ExtraContext`
 
-Main context manager for collecting auxiliary information.
+用于收集辅助信息的主要上下文管理器。
 
 ```python
 ctx = ExtraContext(root_module, logger=None)
 ```
 
-**Parameters:**
-- `root_module` (nn.Module): Root module to scan
-- `logger` (Callable, optional): Logger function
+**参数：**
+- `root_module` (nn.Module): 要扫描的根模块
+- `logger` (Callable, 可选): 日志函数
 
-**Methods:**
+**方法：**
 
 #### `add_loss(prefix, loss, op="sum")`
 
-Register a loss.
-- `prefix`: Name of the loss
-- `loss`: Loss value (tensor)
-- `op`: Merge strategy, default `"sum"` | options: `"mean"` `"max"` `"min"`
+注册一个损失。
+- `prefix`: 损失的名字
+- `loss`: 损失值（张量）
+- `op`: 合并方式，默认 `"sum"` | 可选 `"mean"` `"max"` `"min"`
 
 #### `add_metric(prefix, metric, op="mean")`
 
-Register metrics (e.g., accuracy, F1), merged using average by default.
+注册指标（如准确率、F1），默认用平均值合并。
 
 #### `add_output(prefix, output)`
 
-Save intermediate output for later analysis, enforces shape consistency.
+保存中间输出供事后分析，会检查输出形状一致性。
 
 #### `add_hook(prefix, hook)`
-
-Register a hook function.
+注册可调用钩子。
 
 #### `get_losses(default_op="sum")`
-
-Get all registered losses as a dictionary.
+获取所有收集的损失作为字典。
+```python
+losses = ctx.get_losses()
+# 返回: {'loss_name': tensor(...), ...}
+```
 
 #### `get_metrics(default_op="mean")`
 
-Get all registered metrics as a dictionary.
+获取所有注册过的指标，返回字典。
 
 #### `get_outputs()`
 
-Get saved output tensors.
+获取保存的输出张量。
 
 #### `get_module_prefixes(module)`
 
-Query the path name of a module in the model. Useful for debugging.
+查询某个模块在模型中的路径名。调试时有用。
 
-### Helper Functions
+### 辅助函数
 
 #### `register_extra_loss(module, prefix, loss_term, op="sum")`
 
-Register a loss in a module:
+在模块里注册损失：
 
 ```python
 def forward(self, x):
@@ -175,19 +177,19 @@ def forward(self, x):
 
 #### `register_extra_metric(module, prefix, metric_term, op="mean")`
 
-Register a metric.
+注册指标。
 
 #### `register_extra_output(module, prefix, output)`
 
-Register an output.
+注册输出。
 
 #### `register_extra_hook(module, prefix, hook)`
 
-Register a hook.
+注册钩子。
 
 #### `get_extra_context(module)`
 
-Get the context object in a module for storing debug data:
+在模块里获取上下文对象，用于保存调试数据：
 
 ```python
 if ctx := get_extra_context(self):
@@ -196,13 +198,13 @@ if ctx := get_extra_context(self):
 
 #### `log_extra(module, *args, **kwargs)`
 
-Log debug information through the context.
+通过上下文记录调试信息。
 
-## 📚 Advanced Usage
+## 📚 高级用法
 
-### Multi-Task Learning
+### 多任务学习
 
-Combine multiple losses with different weights:
+用不同权重组合多个损失：
 
 ```python
 with ExtraContext(model) as ctx:
@@ -217,9 +219,9 @@ with ExtraContext(model) as ctx:
     total_loss.backward()
 ```
 
-### Custom Merge Strategy
+### 自定义合并方式
 
-Different losses with different merge strategies:
+不同的损失用不同的合并方式：
 
 ```python
 with ExtraContext(model) as ctx:
@@ -229,55 +231,55 @@ with ExtraContext(model) as ctx:
     losses = ctx.get_losses()
 ```
 
-## ⚠️ Notes
+## ⚠️ 注意
 
-### Thread Safety
+### 线程安全
 
-Not thread-safe. Don't use from multiple threads simultaneously.
+不是线程安全的，不要从多个线程同时使用。
 
-### Nested Contexts
+### 嵌套上下文
 
-Nested ExtraContext on the same model is not allowed and will raise an error:
+不允许嵌套使用同一个模型的多个 ExtraContext，会报错：
 
 ```python
 with ExtraContext(model):
-    with ExtraContext(model):  # Raises ValueError
+    with ExtraContext(model):  # 会抛出 ValueError
         pass
 ```
 
-### Memory Management
+### 内存管理
 
-All data is cleared after exiting the `with` block. Don't access outside:
+退出 `with` 块后所有数据会被清空。不要在外面访问：
 
 ```python
 with ExtraContext(model) as ctx:
     output = model(x)
-    losses = ctx.get_losses()  # OK
+    losses = ctx.get_losses()  # 正常
 
-losses = ctx.get_losses()  # Error
+losses = ctx.get_losses()  # 会报错
 ```
 
-## 🧪 Running Tests
+## 🧪 运行测试
 
 ```bash
 pytest tests/ -v
 ```
 
-Or with unittest:
+或者用 unittest：
 
 ```bash
 python -m unittest discover tests/ -v
 ```
 
-## 📋 Requirements
+## 📋 需求
 
 - Python ≥ 3.10
 - PyTorch ≥ 2.0.0
 
-## 📝 License
+## 📝 协议
 
-MIT - see [LICENSE](LICENSE)
+MIT - 查看 [LICENSE](LICENSE)
 
-## 🤝 Contributing
+## 🤝 贡献
 
-Welcome to submit issues and PRs.
+欢迎提 issue 和 PR。
