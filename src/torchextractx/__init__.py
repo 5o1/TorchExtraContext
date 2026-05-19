@@ -7,12 +7,12 @@ metrics, and outputs from deep nested PyTorch modules without modifying module i
 
 from .torchextractx import (
     ExtraContext,
-    register_extra_loss,
-    register_extra_metric,
-    register_extra_hook,
-    register_extra_output,
-    get_extra_context,
-    log_extra,
+    add_loss,
+    add_metric,
+    add_hook,
+    add_output,
+    get_context,
+    log,
 )
 
 __version__ = "0.1.0"
@@ -21,10 +21,10 @@ __license__ = "LICENSE"
 
 __all__ = [
     "ExtraContext",
-    "register_extra_loss",
-    "register_extra_metric",
-    "register_extra_hook",
-    "register_extra_output",
-    "get_extra_context",
-    "log_extra",
+    "add_loss",
+    "add_metric",
+    "add_hook",
+    "add_output",
+    "get_context",
+    "log",
 ]

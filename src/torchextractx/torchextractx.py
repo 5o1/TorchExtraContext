@@ -228,18 +228,18 @@ class ExtraContext:
         return self.__registered_modules_prefix.get(module_id, [])
 
 
-def register_extra_loss(module: nn.Module, prefix: str, loss_term: torch.Tensor, op: ExtraContext.ReduceOps = "sum"):
+def add_loss(module: nn.Module, prefix: str, loss_term: torch.Tensor, op: ExtraContext.ReduceOps = "sum"):
     """
     Register an extra loss term to a module.
     """
     if not hasattr(module, "extra_context"):
         if module.training:
-            warnings.warn("Training does not launch with an ExtraContext. This loss will be ignored.", UserWarning,stacklevel=2)
+            warnings.warn("Training does not launch with an ExtraContext. This loss will be ignored.", UserWarning, stacklevel=2)
         return
     module.extra_context.add_loss(prefix, loss_term, op=op)
 
 
-def register_extra_metric(module: nn.Module, prefix: str, metric_term: torch.Tensor, op: ExtraContext.ReduceOps = "mean"):
+def add_metric(module: nn.Module, prefix: str, metric_term: torch.Tensor, op: ExtraContext.ReduceOps = "mean"):
     """
     Register an extra metric term to a module.
     """
@@ -250,7 +250,7 @@ def register_extra_metric(module: nn.Module, prefix: str, metric_term: torch.Ten
     module.extra_context.add_metric(prefix, metric_term, op=op)
 
 
-def register_extra_hook(module: nn.Module, prefix: str, hook: Callable):
+def add_hook(module: nn.Module, prefix: str, hook: Callable):
     """
     Register an extra hook to a module.
     """
@@ -260,7 +260,8 @@ def register_extra_hook(module: nn.Module, prefix: str, hook: Callable):
         return
     module.extra_context.add_hook(prefix, hook)
 
-def register_extra_output(module: nn.Module, prefix: str, output: torch.Tensor):
+
+def add_output(module: nn.Module, prefix: str, output: torch.Tensor):
     """
     Register an extra output tensor to a module.
     """
@@ -271,7 +272,7 @@ def register_extra_output(module: nn.Module, prefix: str, output: torch.Tensor):
     module.extra_context.add_output(prefix, output)
 
 
-def get_extra_context(module: nn.Module):
+def get_context(module: nn.Module):
     """
     Get the extra context of a module.
     """
@@ -282,7 +283,7 @@ def get_extra_context(module: nn.Module):
     return module.extra_context
 
 
-def log_extra(module: nn.Module, *args, **kwargs):
+def log(module: nn.Module, *args, **kwargs):
     """
     Log extra information to the module's logger.
     """

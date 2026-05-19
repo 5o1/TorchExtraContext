@@ -20,7 +20,7 @@ This library lets you register losses directly in modules without changing inter
 ```python
 def forward(self, x):
     x = self.layer1(x)
-    register_extra_loss(self, "loss_a", compute_loss(x))
+    add_loss(self, "loss_a", compute_loss(x))
     return x
 ```
 
@@ -51,7 +51,7 @@ pip install -e ".[dev]"  # pytest, black, mypy
 ```python
 import torch
 import torch.nn as nn
-from torchextractx import ExtraContext, register_extra_loss, register_extra_metric
+from torchextractx import ExtraContext, add_loss, add_metric
 
 # Define a model with intermediate losses
 class FeatureExtractor(nn.Module):
@@ -66,7 +66,7 @@ class FeatureExtractor(nn.Module):
         
         # Register an auxiliary loss (no interface modification needed)
         aux_loss = x.mean()
-        register_extra_loss(self, "auxiliary_loss", aux_loss)
+        add_loss(self, "auxiliary_loss", aux_loss)
         
         x = self.fc2(x)
         return x
@@ -162,39 +162,39 @@ Query the path name of a module in the model. Useful for debugging.
 
 ### Helper Functions
 
-#### `register_extra_loss(module, prefix, loss_term, op="sum")`
+#### `add_loss(module, prefix, loss_term, op="sum")`
 
 Register a loss in a module:
 
 ```python
 def forward(self, x):
     x = self.process(x)
-    register_extra_loss(self, "aux_loss", x.sum())
+    add_loss(self, "aux_loss", x.sum())
     return x
 ```
 
-#### `register_extra_metric(module, prefix, metric_term, op="mean")`
+#### `add_metric(module, prefix, metric_term, op="mean")`
 
 Register a metric.
 
-#### `register_extra_output(module, prefix, output)`
+#### `add_output(module, prefix, output)`
 
 Register an output.
 
-#### `register_extra_hook(module, prefix, hook)`
+#### `add_hook(module, prefix, hook)`
 
 Register a hook.
 
-#### `get_extra_context(module)`
+#### `get_context(module)`
 
 Get the context object in a module for storing debug data:
 
 ```python
-if ctx := get_extra_context(self):
+if ctx := get_context(self):
     ctx['debug_data'] = some_value
 ```
 
-#### `log_extra(module, *args, **kwargs)`
+#### `log(module, *args, **kwargs)`
 
 Log debug information through the context.
 
@@ -224,8 +224,8 @@ Different losses with different merge strategies:
 ```python
 with ExtraContext(model) as ctx:
     output = model(x)
-    register_extra_loss(model.layer1, "loss_a", tensor_a, op="mean")
-    register_extra_loss(model.layer2, "loss_b", tensor_b, op="max")
+    add_loss(model.layer1, "loss_a", tensor_a, op="mean")
+    add_loss(model.layer2, "loss_b", tensor_b, op="max")
     losses = ctx.get_losses()
 ```
 

@@ -5,7 +5,7 @@ Unit tests for ExtraContext functionality.
 import unittest
 import torch
 import torch.nn as nn
-from torchextractx import ExtraContext, register_extra_loss, register_extra_metric
+from torchextractx import ExtraContext, add_loss, add_metric
 
 
 class SimpleModel(nn.Module):
@@ -46,7 +46,7 @@ class TestExtraContext(unittest.TestCase):
         """Test adding losses to context."""
         with ExtraContext(self.model) as ctx:
             loss_tensor = torch.tensor(1.5)
-            register_extra_loss(self.model.fc1, "test_loss", loss_tensor)
+            add_loss(self.model.fc1, "test_loss", loss_tensor)
             
             losses = ctx.get_losses()
             self.assertIn("test_loss", losses)
@@ -58,8 +58,8 @@ class TestExtraContext(unittest.TestCase):
             loss1 = torch.tensor(1.0)
             loss2 = torch.tensor(2.0)
             
-            register_extra_loss(self.model.fc1, "test_loss", loss1, op="sum")
-            register_extra_loss(self.model.fc2, "test_loss", loss2, op="sum")
+            add_loss(self.model.fc1, "test_loss", loss1, op="sum")
+            add_loss(self.model.fc2, "test_loss", loss2, op="sum")
             
             losses = ctx.get_losses()
             expected = torch.sum(torch.stack([loss1, loss2]))
@@ -71,8 +71,8 @@ class TestExtraContext(unittest.TestCase):
             loss1 = torch.tensor(1.0)
             loss2 = torch.tensor(3.0)
             
-            register_extra_loss(self.model.fc1, "test_loss", loss1, op="mean")
-            register_extra_loss(self.model.fc2, "test_loss", loss2, op="mean")
+            add_loss(self.model.fc1, "test_loss", loss1, op="mean")
+            add_loss(self.model.fc2, "test_loss", loss2, op="mean")
             
             losses = ctx.get_losses()
             expected = torch.mean(torch.stack([loss1, loss2]))
@@ -82,7 +82,7 @@ class TestExtraContext(unittest.TestCase):
         """Test adding metrics to context."""
         with ExtraContext(self.model) as ctx:
             metric_tensor = torch.tensor(0.95)
-            register_extra_metric(self.model.fc1, "accuracy", metric_tensor)
+            add_metric(self.model.fc1, "accuracy", metric_tensor)
             
             metrics = ctx.get_metrics()
             self.assertIn("accuracy", metrics)
