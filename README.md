@@ -2,25 +2,36 @@
 
 [English](README.md) | [中文](README_CN.md)
 
+[![CI](https://github.com/5o1/TorchExtraContext/actions/workflows/ci.yml/badge.svg)](https://github.com/5o1/TorchExtraContext/actions/workflows/ci.yml)
+[![Release](https://github.com/5o1/TorchExtraContext/actions/workflows/release.yml/badge.svg)](https://github.com/5o1/TorchExtraContext/actions/workflows/release.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0%2B-red)](https://pytorch.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A PyTorch utility library for collecting losses, metrics, and outputs from nested modules.
+A PyTorch context manager for collecting auxiliary losses, metrics, intermediate outputs, hooks, and shared state from nested `torch.nn.Module` objects without changing `forward()` signatures.
 
-## Why Use This?
+## What It Does
 
-When doing deep learning, you often need to add losses in the middle of the network, like distillation loss or auxiliary classifier loss. Common approaches:
-
-1. Pass losses up layer by layer, which requires modifying `forward()` signatures
-2. Use global variables or callbacks, making code complicated
-
-This library lets you register losses directly in modules without changing interfaces:
+In PyTorch, auxiliary losses and intermediate values are often produced deep inside nested `torch.nn.Module` objects. The traditional approach is to return them layer by layer:
 
 ```python
 def forward(self, x):
+    x, loss_a = self.block_a(x)
+    x, loss_b = self.block_b(x)
+    logits = self.head(x)
+    return logits, {"loss_a": loss_a, "loss_b": loss_b}
+```
+
+This approach couples auxiliary data collection to the return values of every module on the call path. Modules that do not create the auxiliary data still need to receive, merge, and return it.
+
+Instead of modifying `forward()` signatures layer by layer, we prefer to register the data in the module where it is produced:
+
+```python
+import torchextractx.keras_style  # Enable Keras-style API
+
+def forward(self, x):
     x = self.layer1(x)
-    add_loss(self, "loss_a", compute_loss(x))
+    self.add_loss("loss_a", compute_loss(x))
     return x
 ```
 
@@ -34,26 +45,35 @@ with ExtraContext(model) as ctx:
 
 ## 🚀 Installation
 
+### From PyPI
+```bash
+pip install torchextractx
+```
+
 ### From source
 ```bash
+git clone https://github.com/5o1/TorchExtraContext.git
+cd TorchExtraContext
 pip install -e .
 ```
 
 ### With dev tools
 ```bash
+git clone https://github.com/5o1/TorchExtraContext.git
+cd TorchExtraContext
 pip install -e ".[dev]"  # pytest, black, mypy
 ```
 
 ## 📖 Quick Start
 
-### Basic Usage
+### Usage
 
 ```python
 import torch
 import torch.nn as nn
-from torchextractx import ExtraContext, add_loss, add_metric
+import torch.nn.functional as F
+from torchextractx import ExtraContext, get_context  # Step #1: Import the context helpers
 
-# Define a model with intermediate losses
 class FeatureExtractor(nn.Module):
     def __init__(self):
         super().__init__()
@@ -63,13 +83,11 @@ class FeatureExtractor(nn.Module):
     def forward(self, x):
         x = self.fc1(x)
         x = torch.relu(x)
-        
-        # Register an auxiliary loss (no interface modification needed)
-        aux_loss = x.mean()
-        add_loss(self, "auxiliary_loss", aux_loss)
+        get_context(self).add_loss("feature_mean_loss", x.mean())  # Step #2: Register the loss where it is created
         
         x = self.fc2(x)
         return x
+
 
 class Classifier(nn.Module):
     def __init__(self):
@@ -82,152 +100,232 @@ class Classifier(nn.Module):
         x = self.classifier(x)
         return x
 
-# Training loop
+
 model = Classifier()
 optimizer = torch.optim.Adam(model.parameters())
+x = torch.randn(32, 10)
+targets = torch.randint(0, 2, (32,))
 
-# Use ExtraContext
-with ExtraContext(model) as ctx:
-    x = torch.randn(32, 10)
+with ExtraContext(model) as ctx:  # Step #3: Create the collection context in the training step
     logits = model(x)
-    
-    # Main loss
-    main_loss = torch.nn.functional.cross_entropy(logits, targets)
-    
-    # Collect losses from all nested modules
-    aux_losses = ctx.get_losses()  # {'auxiliary_loss': tensor(...), ...}
-    
-    # Total loss = main loss + weighted auxiliary losses
+    main_loss = F.cross_entropy(logits, targets)
+    extra_losses = ctx.get_losses()  # Step #4: Collect losses registered inside the model
+
     total_loss = main_loss
-    for name, loss_val in aux_losses.items():
-        print(f"aux {name}: {loss_val:.4f}")
-        total_loss = total_loss + 0.1 * loss_val  # weight is tunable
-    
-    # Backward
+    for loss in extra_losses.values():
+        total_loss = total_loss + 0.1 * loss
+
     optimizer.zero_grad()
     total_loss.backward()
     optimizer.step()
 ```
 
-## 🔧 API Reference
-
-### `ExtraContext`
-
-Main context manager for collecting auxiliary information.
+### Enable Keras Style
 
 ```python
-ctx = ExtraContext(root_module, logger=None)
+import torchextractx.keras_style  # Step #1: Enable torch.nn.Module.add_loss
+from torchextractx import ExtraContext
+
+class FeatureExtractor(nn.Module):
+    def __init__(self):
+        ...
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = torch.relu(x)
+        self.add_loss("feature_mean_loss", x.mean())  # Step #2: Register the loss where it is created
+
+        x = self.fc2(x)
+        return x
+
+
+...
+
+with ExtraContext(model) as ctx:  # Step #3: Create the collection context in the training step
+    logits = model(x)
+    main_loss = F.cross_entropy(logits, targets)
+    extra_losses = ctx.get_losses()  # Step #4: Collect losses registered inside the model
+
+    ...
 ```
 
-**Parameters:**
-- `root_module` (nn.Module): Root module to scan
-- `logger` (Callable, optional): Logger function
+### Use with Lightning
 
-**Methods:**
+Lightning's `LightningModule` is a subclass of `torch.nn.Module`, so the same APIs can be used in Lightning `training_step`, `validation_step`, or inside module `forward()` methods. Wrap one model call with `ExtraContext(self)` in the step, then collect losses, metrics, hooks, shared objects, and logs from the context.
 
-#### `add_loss(prefix, loss, op="sum")`
+## 📚 Other Usage
 
-Register a loss.
-- `prefix`: Name of the loss
-- `loss`: Loss value (tensor)
-- `op`: Merge strategy, default `"sum"` | options: `"mean"` `"max"` `"min"`
+### Export Metrics
 
-#### `add_metric(prefix, metric, op="mean")`
-
-Register metrics (e.g., accuracy, F1), merged using average by default.
-
-#### `add_output(prefix, output)`
-
-Save intermediate output for later analysis, enforces shape consistency.
-
-#### `add_hook(prefix, hook)`
-
-Register a hook function.
-
-#### `get_losses(default_op="sum")`
-
-Get all registered losses as a dictionary.
-
-#### `get_metrics(default_op="mean")`
-
-Get all registered metrics as a dictionary.
-
-#### `get_outputs()`
-
-Get saved output tensors.
-
-#### `get_module_prefixes(module)`
-
-Query the path name of a module in the model. Useful for debugging.
-
-### Helper Functions
-
-#### `add_loss(module, prefix, loss_term, op="sum")`
-
-Register a loss in a module:
+`loss` usually goes into `total_loss` and participates in `backward()`. A `metric` is only for monitoring, such as accuracy. Keeping them separate avoids mixing observation-only values into the optimized loss.
 
 ```python
-def forward(self, x):
-    x = self.process(x)
-    add_loss(self, "aux_loss", x.sum())
-    return x
+class ClassifierHead(nn.Module):
+    def __init__(self):
+        ...
+
+    def forward(self, x, targets):
+        logits = self.classifier(x)
+
+        with torch.no_grad():
+            preds = logits.argmax(dim=-1)
+            acc = (preds == targets).float().mean()
+        get_context(self).add_metric("train/accuracy", acc)  # For monitoring only
+
+        return logits
+
+
+head = ClassifierHead()
+with ExtraContext(head) as ctx:
+    logits = head(x, targets)
+    main_loss = F.cross_entropy(logits, targets)
+    metrics = ctx.get_metrics()
 ```
 
-#### `add_metric(module, prefix, metric_term, op="mean")`
+### Hooks
 
-Register a metric.
-
-#### `add_output(module, prefix, output)`
-
-Register an output.
-
-#### `add_hook(module, prefix, hook)`
-
-Register a hook.
-
-#### `get_context(module)`
-
-Get the context object in a module for storing debug data:
+A hook can store a callback that should run after `forward()`. ExtraContext only collects these functions; the training step decides when to execute them.
 
 ```python
-if ctx := get_context(self):
-    ctx['debug_data'] = some_value
+class FeatureBlock(nn.Module):
+    def __init__(self):
+        ...
+
+    def forward(self, x):
+        y = self.block(x)
+        get_context(self).add_hook("feature_norm", lambda: y.detach().norm().item())
+        return y
+
+
+block = FeatureBlock()
+with ExtraContext(block) as ctx:
+    output = block(x)
+    hook_results = {
+        name: [hook() for hook in hooks]
+        for name, hooks in ctx.hooks.items()
+    }
 ```
 
-#### `log(module, *args, **kwargs)`
+### Shared Objects
 
-Log debug information through the context.
-
-## 📚 Advanced Usage
-
-### Multi-Task Learning
-
-Combine multiple losses with different weights:
+`put/get/pop` can pass values out to the training step, but it can also share objects between modules in the same forward pass. This bypasses `forward()` arguments and return values. **Note that this method is not very safe**: it relies on key names and module call order, so it is best kept to small experimental uses.
 
 ```python
-with ExtraContext(model) as ctx:
+class Encoder(nn.Module):
+    def __init__(self):
+        ...
+
+    def forward(self, x):
+        latent = self.backbone(x)
+        get_context(self).put("latent", latent)
+        return latent
+
+
+class Decoder(nn.Module):
+    def __init__(self):
+        ...
+
+    def forward(self, x):
+        ctx = get_context(self)
+        latent = ctx.pop("latent")
+        return self.head(x + latent)
+
+
+class AutoEncoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.encoder = Encoder()
+        self.decoder = Decoder()
+
+    def forward(self, x):
+        encoded = self.encoder(x)
+        return self.decoder(encoded)
+
+
+model = AutoEncoder()
+with ExtraContext(model):
     output = model(x)
-    losses = ctx.get_losses()
-    
-    total_loss = primary_loss
-    for name, loss_val in losses.items():
-        weight = {'loss_a': 0.5, 'loss_b': 0.3}.get(name, 0.1)
-        total_loss += weight * loss_val
-    
-    total_loss.backward()
 ```
 
-### Custom Merge Strategy
+### Shared Logger
 
-Different losses with different merge strategies:
+Pass a logger when creating `ExtraContext` if several modules need to write logs. Modules still call `get_context(self).log(...)`; **Note:** Keras style does not monkey patch `log` onto `torch.nn.Module`.
 
 ```python
-with ExtraContext(model) as ctx:
-    output = model(x)
-    add_loss(model.layer1, "loss_a", tensor_a, op="mean")
-    add_loss(model.layer2, "loss_b", tensor_b, op="max")
-    losses = ctx.get_losses()
+records = []
+
+
+def logger(event, **fields):
+    records.append((event, fields))
+
+
+class FeatureBlock(nn.Module):
+    def __init__(self):
+        ...
+
+    def forward(self, x):
+        y = self.block(x)
+        get_context(self).log("feature_block", mean=y.detach().mean().item())
+        return y
+
+
+block = FeatureBlock()
+with ExtraContext(block, logger=logger):
+    output = block(x)
 ```
+
+## 🔧 API
+
+### Package Map
+
+| Import path | Public symbols | Notes |
+| --- | --- | --- |
+| `torchextractx` | `ExtraContext`, `get_context`, `NullContext`, `configure_null_context_behavior`, `get_null_context_behavior`, `enable_keras_style_api`, `disable_keras_style_api`, `is_keras_style_api_enabled` | Preferred public import path for application code. |
+| `torchextractx.context` | `ExtraContext`, `get_context` | Active context manager and module lookup helper. |
+| `torchextractx.null_context` | `NullContext`, `configure_null_context_behavior`, `get_null_context_behavior` | No-op fallback and missing-context policy. |
+| `torchextractx.keras_style` | side-effect import | Import this module to enable Keras-style helpers immediately. |
+
+### `torchextractx.context.ExtraContext`
+
+| Member | Kind | Access | Notes |
+| --- | --- | --- | --- |
+| `ExtraContext(root_module, logger=None)` | class | `with ExtraContext(model) as ctx:` | Main context manager for nested modules. |
+| `add_loss(prefix, loss, op="sum")` | method | `ctx.add_loss(...)` | Register an auxiliary loss tensor. |
+| `add_metric(prefix, metric, op="mean")` | method | `ctx.add_metric(...)` | Register a metric tensor. |
+| `add_output(prefix, output)` | method | `ctx.add_output(...)` | Save an intermediate output tensor with shape checks. |
+| `add_hook(prefix, hook)` | method | `ctx.add_hook(...)` | Register a callable hook. |
+| `put(key, value)` | method | `ctx.put(...)` | Store shared state for module-to-module communication. |
+| `get(key, default=None)` | method | `ctx.get(...)` | Read shared state. |
+| `pop(key, default=None)` | method | `ctx.pop(...)` | Remove and return shared state. |
+| `has(key)` | method | `ctx.has(...)` | Check whether a shared state item exists. |
+| `get_losses(default_op="sum")` | method | `ctx.get_losses(...)` | Return reduced losses as a dictionary. |
+| `get_metrics(default_op="mean")` | method | `ctx.get_metrics(...)` | Return reduced metrics as a dictionary. |
+| `get_outputs()` | method | `ctx.get_outputs(...)` | Return saved outputs as a dictionary. |
+| `get_module_prefixes(module)` | method | `ctx.get_module_prefixes(...)` | Return model path names for a module. |
+| `log(*args, **kwargs)` | method | `ctx.log(...)` | Forward logging calls to the configured logger. |
+| `losses` | property | `ctx.losses` | Raw loss store. |
+| `hooks` | property | `ctx.hooks` | Raw hook store. |
+
+### `torchextractx.null_context.NullContext`
+
+| Member | Kind | Access | Notes |
+| --- | --- | --- | --- |
+| `NullContext(module=None)` | class | `NullContext(module)` or returned by `get_context(module)` | No-op context used when no `ExtraContext` is active. |
+| `add_loss`, `add_metric`, `add_output`, `add_hook`, `put`, `log` | methods | `ctx.add_loss(...)`, `ctx.put(...)`, etc. | Ignored; may warn, stay silent, or raise based on the configured behavior. |
+| `get`, `pop`, `has`, `get_losses`, `get_metrics`, `get_outputs`, `get_module_prefixes` | methods | `ctx.get(...)`, `ctx.get_losses()`, etc. | Return defaults or empty results. |
+| `losses`, `hooks` | properties | `ctx.losses`, `ctx.hooks` | Return empty stores. |
+| `__getitem__` | method | `ctx[key]` | Raises `KeyError` because no shared state is active. |
+
+### `torchextractx.keras_style`
+
+| Import | Effect | Notes |
+| --- | --- | --- |
+| `import torchextractx.keras_style` | Enables `torch.nn.Module.add_loss`, `add_metric`, `add_output`, and `add_hook`. | Process-wide side effect import. |
+| `from torchextractx import enable_keras_style_api` | Same effect explicitly. | Useful when you want the switch in code instead of import side effects. |
+| `disable_keras_style_api()` | Restores the original `torch.nn.Module` methods. | Re-exported from `torchextractx`. |
+| `is_keras_style_api_enabled()` | Reports whether the shim is active. | Re-exported from `torchextractx`. |
+
+**Note:** Use `get_context(self).log(...)` for logging; Keras style does not monkey patch `log` onto `torch.nn.Module`.
 
 ## ⚠️ Notes
 
@@ -277,6 +375,13 @@ python -m unittest discover tests/ -v
 ## 📝 License
 
 MIT - see [LICENSE](LICENSE)
+
+## 🚢 Release Process
+
+- The canonical version lives in `pyproject.toml` under `[project].version`.
+- Release tags must use `vX.Y.Z` and match that version exactly.
+- Pushing a matching tag runs tests, builds distributions, creates a GitHub Release, and publishes to PyPI through PyPI Trusted Publishing.
+- PyPI publishing does not require a PyPI token; authentication is handled by GitHub Actions OpenID Connect.
 
 ## 🤝 Contributing
 

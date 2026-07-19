@@ -1,30 +1,34 @@
-"""
-TorchExtraContext: A PyTorch utility library for managing extra losses, metrics, and outputs.
+"""TorchExtraContext: collect auxiliary losses, metrics, outputs, and shared state."""
 
-This library provides a context manager for non-invasively collecting auxiliary losses,
-metrics, and outputs from deep nested PyTorch modules without modifying module interfaces.
-"""
+from importlib.metadata import PackageNotFoundError, version
 
-from .torchextractx import (
-    ExtraContext,
-    add_loss,
-    add_metric,
-    add_hook,
-    add_output,
-    get_context,
-    log,
+from ._keras_style import (
+    disable_keras_style_api,
+    enable_keras_style_api,
+    is_keras_style_api_enabled,
+)
+from .context import ExtraContext, get_context
+from .null_context import (
+    NullContext,
+    configure_null_context_behavior,
+    get_null_context_behavior,
 )
 
-__version__ = "0.1.0"
+try:
+    __version__ = version("torchextractx")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"
+
 __author__ = "5o1"
 __license__ = "LICENSE"
 
 __all__ = [
     "ExtraContext",
-    "add_loss",
-    "add_metric",
-    "add_hook",
-    "add_output",
+    "NullContext",
+    "configure_null_context_behavior",
     "get_context",
-    "log",
+    "get_null_context_behavior",
+    "enable_keras_style_api",
+    "disable_keras_style_api",
+    "is_keras_style_api_enabled",
 ]
