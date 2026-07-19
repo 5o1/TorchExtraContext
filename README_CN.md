@@ -379,6 +379,7 @@ MIT - 查看 [LICENSE](LICENSE)
 
 - 版本号以 `pyproject.toml` 里的 `[project].version` 为准。
 - 发布标签必须使用 `vX.Y.Z`，并且要和该版本完全一致。
+- GitHub Release 的版本说明来自 `CHANGELOG.md`。
 - 推送匹配的标签后，会自动跑测试、构建制品、创建 GitHub Release，并通过 PyPI Trusted Publishing 发布到 PyPI。
 - 发布到 PyPI 不需要配置 PyPI token；认证由 GitHub Actions OpenID Connect 完成。
 

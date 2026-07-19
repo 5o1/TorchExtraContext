@@ -93,6 +93,9 @@ jobs:
       contents: write
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Download distributions
         uses: actions/download-artifact@v4
         with:
@@ -108,7 +111,7 @@ jobs:
           gh release create "$TAG_NAME" dist/* \
             --repo "$REPO" \
             --title "$TAG_NAME" \
-            --notes "Release $TAG_NAME"
+            --notes-file CHANGELOG.md
 
   pypi-publish:
     name: Publish to PyPI

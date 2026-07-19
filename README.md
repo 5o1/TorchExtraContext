@@ -380,6 +380,7 @@ MIT - see [LICENSE](LICENSE)
 
 - The canonical version lives in `pyproject.toml` under `[project].version`.
 - Release tags must use `vX.Y.Z` and match that version exactly.
+- GitHub Release notes are sourced from `CHANGELOG.md`.
 - Pushing a matching tag runs tests, builds distributions, creates a GitHub Release, and publishes to PyPI through PyPI Trusted Publishing.
 - PyPI publishing does not require a PyPI token; authentication is handled by GitHub Actions OpenID Connect.
 
